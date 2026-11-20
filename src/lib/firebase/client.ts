@@ -2,8 +2,14 @@ import { initializeApp, getApps, getApp, type FirebaseOptions } from "firebase/a
 import { connectAuthEmulator, getAuth } from "firebase/auth";
 import { connectFirestoreEmulator, getFirestore } from "firebase/firestore";
 
-function requireEnv(name: string): string {
-  const value = process.env[name];
+// Next.js only inlines NEXT_PUBLIC_* values into the browser bundle for
+// statically-analyzable `process.env.THE_NAME` member access — a helper
+// that does `process.env[name]` (computed/bracket access) can't be
+// inlined, so in the browser it silently reads `undefined` from the
+// empty `process.env` shim instead of the real value. Every read below is
+// therefore a direct `process.env.X` expression; this function only
+// validates the already-resolved value.
+function required(value: string | undefined, name: string): string {
   if (!value) {
     throw new Error(`Missing required environment variable: ${name}`);
   }
@@ -14,12 +20,24 @@ function requireEnv(name: string): string {
 // THREAT-SPT-001 "Spoofing" note) — access control lives in Firestore Security
 // Rules and the API routes, not in keeping this config hidden.
 const firebaseConfig: FirebaseOptions = {
-  apiKey: requireEnv("NEXT_PUBLIC_FIREBASE_API_KEY"),
-  authDomain: requireEnv("NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN"),
-  projectId: requireEnv("NEXT_PUBLIC_FIREBASE_PROJECT_ID"),
-  storageBucket: requireEnv("NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET"),
-  messagingSenderId: requireEnv("NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID"),
-  appId: requireEnv("NEXT_PUBLIC_FIREBASE_APP_ID"),
+  apiKey: required(process.env.NEXT_PUBLIC_FIREBASE_API_KEY, "NEXT_PUBLIC_FIREBASE_API_KEY"),
+  authDomain: required(
+    process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+    "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN"
+  ),
+  projectId: required(
+    process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+    "NEXT_PUBLIC_FIREBASE_PROJECT_ID"
+  ),
+  storageBucket: required(
+    process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+    "NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET"
+  ),
+  messagingSenderId: required(
+    process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+    "NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID"
+  ),
+  appId: required(process.env.NEXT_PUBLIC_FIREBASE_APP_ID, "NEXT_PUBLIC_FIREBASE_APP_ID"),
 };
 
 export const firebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
@@ -36,8 +54,12 @@ if (
   process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === "true" &&
   !globalWithEmulatorFlag.__oesEmulatorConnected
 ) {
-  const authHost = requireEnv("NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST");
-  const [firestoreHost, firestorePort] = requireEnv(
+  const authHost = required(
+    process.env.NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST,
+    "NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST"
+  );
+  const [firestoreHost, firestorePort] = required(
+    process.env.NEXT_PUBLIC_FIRESTORE_EMULATOR_HOST,
     "NEXT_PUBLIC_FIRESTORE_EMULATOR_HOST"
   ).split(":");
   connectAuthEmulator(auth, `http://${authHost}`, { disableWarnings: true });
