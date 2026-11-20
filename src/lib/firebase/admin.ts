@@ -27,6 +27,15 @@ function getAdminApp(): App {
     return getApp();
   }
 
+  // Local/CI-only path: FIRESTORE_EMULATOR_HOST / FIREBASE_AUTH_EMULATOR_HOST
+  // (set by docker-compose/Jenkins for the Local Emulator Suite) let the
+  // Admin SDK connect without a real service account. Never set these in
+  // staging/production — ENVIRONMENT_CONFIGURATION.md's per-environment
+  // table still applies there.
+  if (process.env.FIRESTORE_EMULATOR_HOST || process.env.FIREBASE_AUTH_EMULATOR_HOST) {
+    return initializeApp({ projectId: requireEnv("NEXT_PUBLIC_FIREBASE_PROJECT_ID") });
+  }
+
   const serviceAccountJson = requireEnv("FIREBASE_SERVICE_ACCOUNT_KEY");
   const serviceAccount = JSON.parse(serviceAccountJson);
 

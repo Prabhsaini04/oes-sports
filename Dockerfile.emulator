@@ -1,0 +1,10 @@
+# Firebase Local Emulator Suite (Auth + Firestore) — local/Docker/Jenkins
+# only, so this "fully working" deployment doesn't require a real Firebase
+# project. Never used in staging/production (ENVIRONMENT_CONFIGURATION.md).
+FROM node:24-alpine
+RUN apk add --no-cache openjdk21-jre-headless bash
+RUN npm install -g firebase-tools@15.0.0
+WORKDIR /app
+COPY firebase.json firestore.rules firestore.indexes.json .firebaserc ./
+EXPOSE 4000 8080 9099
+CMD ["firebase", "emulators:start", "--project", "demo-oes-sports", "--only", "auth,firestore"]
