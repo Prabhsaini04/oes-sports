@@ -1,0 +1,83 @@
+rules_version = '2';
+
+// ENG-SPT-006 — first-draft Firestore Security Rules, implementing the
+// decisions recorded in ARCHITECTURE.md and the mitigations required by
+// SECURITY/THREAT-SPT-001.md. Default-deny; every path below is an
+// explicit allow-list (05-Security/AUTHENTICATION_AUTHORIZATION_STANDARDS.md).
+//
+// FLAGGED FOR SECURITY REVIEW (per CLAUDE.md / ENG-SPT-002-implementation-plan.md
+// §3) — not finalized by this agent. In particular: this still trusts
+// `getAfter`/`get` cost on every evaluated write and has not been load- or
+// rules-unit-tested (Firebase emulator rules tests, out of scope here).
+//
+// ADR-SPT-002: all authorization-sensitive writes (event CRUD, join/leave,
+// results) go through Next.js API routes using the Admin SDK, which
+// bypasses these rules entirely. So those collections deny ALL direct
+// client writes below — defense in depth, not the primary enforcement
+// (the API routes are, per src/lib/auth/session.ts).
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // Private account doc — email, role. Never exposed by a public/list
+    // read (THREAT-SPT-001 "Information disclosure", split-document
+    // mitigation). Owner may create their own doc at sign-up with
+    // roles.organizer forced false; no client may ever update roles after
+    // creation (grant/revoke is Human-Owner-only via Admin SDK, per
+    // ARCHITECTURE.md "Decided").
+    match /users/{uid} {
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid)
+        && request.resource.data.roles.organizer == false;
+      allow update, delete: if false;
+    }
+
+    // Public profile doc — displayName, gamertag, stats. Publicly
+    // readable (REQ-004, REQ-007 leaderboard). Owner may create it and
+    // edit displayName/gamertag only; stats are server-maintained only
+    // (written by the result API route via the Admin SDK, which bypasses
+    // these rules — client writes to stats are denied here).
+    match /profiles/{uid} {
+      allow read: if true;
+      allow create: if isOwner(uid)
+        && request.resource.data.stats.wins == 0
+        && request.resource.data.stats.losses == 0;
+      allow update: if isOwner(uid)
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['displayName', 'gamertag']);
+      allow delete: if false;
+    }
+
+    // Events — public read (REQ-004). All writes (create/edit/cancel) are
+    // server-side only via the API routes (ADR-SPT-002); direct client
+    // writes are denied even for an Organizer, closing the "bypass the UI,
+    // call Firestore directly" risk named in THREAT-SPT-001.
+    match /events/{eventId} {
+      allow read: if true;
+      allow write: if false;
+
+      // Participant list — members-only read, not public (ARCHITECTURE.md
+      // "Decided", REQUIREMENTS.md question 12). Writes are server-side
+      // only (join/leave capacity transaction, ADR-SPT-002).
+      match /participants/{uid} {
+        allow read: if isSignedIn();
+        allow write: if false;
+      }
+
+      // Result doc (events/{eventId}/meta/result) — public read (REQ-004,
+      // REQ-007), server-side-only write (result recording/editing,
+      // ADR-SPT-002).
+      match /meta/{docId} {
+        allow read: if true;
+        allow write: if false;
+      }
+    }
+  }
+}

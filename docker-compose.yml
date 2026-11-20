@@ -1,0 +1,36 @@
+services:
+  firebase-emulator:
+    build:
+      context: .
+      dockerfile: Dockerfile.emulator
+    ports:
+      - "4000:4000" # Emulator UI
+      - "8085:8080" # Firestore (host 8080 is already used by this machine's Jenkins)
+      - "9099:9099" # Auth
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # These two are baked into the browser bundle (NEXT_PUBLIC_*), so
+        # they must be an address the browser itself can resolve — the
+        # host-mapped ports, not the Docker-internal "firebase-emulator"
+        # hostname (that only resolves inside the compose network, which
+        # is what the non-public vars below correctly use).
+        NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST: localhost:9099
+        NEXT_PUBLIC_FIRESTORE_EMULATOR_HOST: localhost:8085
+    ports:
+      - "3000:3000"
+    environment:
+      FIREBASE_AUTH_EMULATOR_HOST: firebase-emulator:9099
+      FIRESTORE_EMULATOR_HOST: firebase-emulator:8080
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: demo-oes-sports
+    depends_on:
+      firebase-emulator:
+        condition: service_healthy
